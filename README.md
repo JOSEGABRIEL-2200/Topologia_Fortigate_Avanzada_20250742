@@ -331,15 +331,24 @@ Esta política limita específicamente el volumen de conexiones **SYN** hacia el
 
 ## 5. Prueba de Ataque: Inyección de Payloads SQLi
 
-Desde la máquina atacante (Kali/USUARIO-PC en la VLAN de Usuarios, IP `10.7.42.10`) se enviaron múltiples payloads de SQL Injection contra el formulario de login del WEB-Server (`10.7.42.130`), usando el script [`scripts/sql_injection_payloads.sh`](scripts/sql_injection_payloads.sh).
+**Metodología y herramienta:** desde la máquina atacante (Kali, VLAN10_USUARIOS, IP `10.7.42.10`) se usó `curl` para enviar el payload directamente como parámetro de consulta (query string) en una petición **HTTPS GET** contra un archivo de prueba publicado en el WEB-Server (`https://10.7.42.130/prueba.txt`), usando el script [`scripts/sql_injection_payloads.sh`](scripts/sql_injection_payloads.sh).
 
-**Resultado esperado y observado:**
-1. FortiGate identifica el patrón malicioso con la firma `HTTP.URI.SQL.Injection` del sensor `IPS_SQLI_CUARENTENA`.
-2. La petición se bloquea (`dropped`) — el atacante no recibe respuesta del formulario.
+> **Nota importante:** el WEB-Server de este laboratorio no tiene un formulario de login ni un backend de base de datos real. Por eso el ataque no se hace vía `POST` contra un formulario, sino inyectando el payload como query string en la URL (`GET /prueba.txt?id=1' UNION SELECT 1,2,3--`). El sensor IPS de FortiGate (firma `HTTP.URI.SQL.Injection`, rule 15621) inspecciona el patrón directamente sobre la URI/query string de la petición HTTPS —gracias a que la política `USUARIOS_WEB_HTTPS` tiene Full SSL Inspection activa—, sin importar si existe o no un backend vulnerable detrás. Esto es suficiente y válido para demostrar la detección, el bloqueo y la cuarentena por parte del FortiGate.
+
+**Resultado verificado directamente en el FortiGate por CLI** (`execute log filter category 4` / `field srcip 10.7.42.10` / `field dstip 10.7.42.130` / `execute log display`):
+
+```
+date=2026-09-22 time=10:54:10  type="utm" subtype="ips" eventtype="signature"
+srcip=10.7.42.10  srcintf="VLAN10_USUARIOS"  dstip=10.7.42.130  dstintf="VLAN20_WEB"
+service="HTTPS"  action="dropped"  policyid=2  policyname="USUARIOS_WEB_HTTPS"
+attack="HTTP.URI.SQL.Injection"  attackid=15621  profile="IPS_SQLI_CUARENTENA"
+url="/prueba.txt?id=1%27%20UNION%20SELECT%201,2,3--"  severity="high"
+```
+
+1. FortiGate identifica el patrón malicioso con la firma `HTTP.URI.SQL.Injection` (rule 15621) del sensor `IPS_SQLI_CUARENTENA`, aplicado sobre la política principal `USUARIOS_WEB_HTTPS` (Policy ID 2).
+2. La petición se bloquea (`action: dropped`) — el atacante no recibe respuesta del servidor.
 3. La IP atacante (`10.7.42.10`) es puesta en **cuarentena** automáticamente por 1 día (visible en `Dashboard → Quarantine`).
 4. El evento queda registrado en `Log & Report → Security Events → Intrusion Prevention`, con Action `Blocked`/`dropped`, Attack Name `HTTP.URI.SQL.Injection`, Source `10.7.42.10`, Destination `WEB_SERVER`.
-
-> ⚠️ *Esta sección se actualizará con evidencia fresca (capturas + script exacto) al repetir la prueba de forma reproducible antes del video.*
 
 > Ver evidencia: [`20_ataque_sqli_log_ips_dropped.png`](screenshots/20_ataque_sqli_log_ips_dropped.png), [`21_cuarentena_ip_baneada.png`](screenshots/21_cuarentena_ip_baneada.png), [`22_cuarentena_detalle_ip.png`](screenshots/22_cuarentena_detalle_ip.png)
 
@@ -366,7 +375,7 @@ Todas las capturas están en la carpeta [`screenshots/`](screenshots/), numerada
 | 12 | [`12_politica2_bloqueo_usuarios_db_3306.png`](screenshots/12_politica2_bloqueo_usuarios_db_3306.png) | Política 2: BLOQUEAR_USUARIOS_DB_3306 |
 | 13 | [`13_dpi_ssl_inspection_perfil.png`](screenshots/13_dpi_ssl_inspection_perfil.png) | Perfil SSL Inspection (DPI) |
 | 14 | [`14_ips_sensor_sqli_creacion.png`](screenshots/14_ips_sensor_sqli_creacion.png) | Creación del sensor IPS_SQLI_CUARENTENA |
-| 15 | [`15_ips_sensor_sqli_quarantine_signature.png`](screenshots/15_ips_sensor_sqli_quarantine_signature.png) | Firma SQLi en modo Quarantine (5 min) |
+| 15 | [`15_ips_sensor_sqli_quarantine_signature.png`](screenshots/15_ips_sensor_sqli_quarantine_signature.png) | Firma SQLi en modo Quarantine (1 día) |
 | 16 | [`16_file_filter_bloqueo_exe_perfil.png`](screenshots/16_file_filter_bloqueo_exe_perfil.png) | Perfil File Filter BLOQUEAR_EXE_WEB |
 | 17 | [`17_dos_policy_rate_limiting.png`](screenshots/17_dos_policy_rate_limiting.png) | DoS Policy DOS_USUARIOS_WEB |
 | 18 | [`18_politicas_finales_web_db_3306.png`](screenshots/18_politicas_finales_web_db_3306.png) | Listado final de políticas (interface pair view) |
@@ -385,7 +394,7 @@ Todas las capturas están en la carpeta [`screenshots/`](screenshots/), numerada
 
 | Archivo | Descripción |
 |---|---|
-| [`scripts/sql_injection_payloads.sh`](scripts/sql_injection_payloads.sh) | Script usado para enviar los payloads de SQL Injection contra el formulario del WEB-Server y verificar el bloqueo/cuarentena por parte de FortiGate. |
+| [`scripts/sql_injection_payloads.sh`](scripts/sql_injection_payloads.sh) | Script usado para enviar (vía `curl`, como query string en peticiones HTTPS GET) los payloads de SQL Injection contra el WEB-Server y verificar el bloqueo/cuarentena por parte de FortiGate. |
 
 ---
 
