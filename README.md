@@ -102,7 +102,8 @@ Todo el direccionamiento IP de este laboratorio está basado en la matrícula de
    │ USUARIOS → DB (3306)  : DENY explícito                         │
    │ WEB → DB (3306)       : ACCEPT (único puerto permitido)        │
    │ WEB → DB (resto)      : DENY explícito                         │
-   │ WAN (port1)           : DoS Policy — rate limiting / anti-DoS  │
+   │ USUARIOS → WEB (DoS)  : DoS Policy — SYN flood bloqueado a     │
+   │                         50 pps, resto de anomalías en Log      │
    └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -213,6 +214,8 @@ El NAT se habilita directamente en la política de firewall que da salida a Inte
 
 > Ver evidencia: [`09_nat_politica_usuarios_internet.png`](screenshots/09_nat_politica_usuarios_internet.png), [`10_nat_politica_usuarios_internet_2.png`](screenshots/10_nat_politica_usuarios_internet_2.png)
 
+> También existió una política temporal `DB_INSTALACION_TEMPORAL` (VLAN30_DB → port1, con NAT) usada únicamente para instalar paquetes en el DB-Server durante el montaje del laboratorio. Siguiendo buenas prácticas de seguridad, esta política quedó **deshabilitada** una vez finalizada la instalación (el DB-Server no debe tener salida a Internet en producción).
+
 ### 4.5 Política 1 — Permitir Usuarios → WEB-Server (443)
 
 **Ruta:** `Policy & Objects → Firewall Policy → Create New`
@@ -227,9 +230,9 @@ El NAT se habilita directamente en la política de firewall que da salida a Inte
 | Service | `HTTPS` |
 | Action | `ACCEPT` |
 | NAT | Disabled (tráfico interno) |
-| Security Profiles | SSL Inspection (`certificate-inspection`) + IPS (`IPS_SQLI_CUARENTENA`) + File Filter (`BLOQUEAR_EXE_WEB`) |
+| Security Profiles | SSL Inspection (`custom-deep-inspection`, Full SSL Inspection) + IPS (`IPS_SQLI_CUARENTENA`) + File Filter (`BLOQUEAR_EXE_WEB`) |
 
-> Se agregó además una política auxiliar `LAB_HTTP_VALIDACION` (mismo origen/destino, servicio HTTP) para poder demostrar el bloqueo de los payloads de SQL Injection sin depender de la inspección SSL completa durante la grabación del video.
+> Se agregó además una política auxiliar `LAB_HTTP_VALIDACION` (mismo origen/destino, servicio HTTP) para poder demostrar el bloqueo de los payloads de SQL Injection sin depender de la inspección SSL completa. Actualmente queda **deshabilitada** en el running-config final — la política principal (`USUARIOS_WEB_HTTPS`) ya realiza inspección SSL completa (Full SSL Inspection), por lo que el sensor IPS puede inspeccionar directamente el tráfico HTTPS sin necesidad de esta política auxiliar.
 
 > Ver evidencia: [`11_politica1_usuarios_web_443.png`](screenshots/11_politica1_usuarios_web_443.png)
 
@@ -254,7 +257,7 @@ El NAT se habilita directamente en la política de firewall que da salida a Inte
 
 **Ruta:** `Security Profiles → SSL/SSH Inspection`
 
-Se activó inspección SSL (`certificate-inspection`) sobre la política `USUARIOS_WEB_HTTPS`, habilitando **DPI** para que el resto de los perfiles de seguridad (IPS, File Filter) puedan inspeccionar el contenido del tráfico HTTPS hacia el WEB-Server.
+Se creó y activó un perfil de **Full SSL Inspection** (`custom-deep-inspection`) sobre la política `USUARIOS_WEB_HTTPS`, habilitando **DPI real** (descifrado del tráfico HTTPS con el certificado de FortiGate) para que el resto de los perfiles de seguridad (IPS, File Filter) puedan inspeccionar el contenido — no solo el certificado — del tráfico hacia el WEB-Server. Esto requirió gestionar los certificados SSL de FortiGate (ver [`26_certificados_fortigate.png`](screenshots/26_certificados_fortigate.png)).
 
 > Ver evidencia: [`13_dpi_ssl_inspection_perfil.png`](screenshots/13_dpi_ssl_inspection_perfil.png)
 
@@ -267,9 +270,9 @@ Se creó un sensor IPS personalizado:
 | Campo | Valor |
 |---|---|
 | Nombre del sensor | `IPS_SQLI_CUARENTENA` |
-| Firma agregada | `HTTP.URI.SQL.Injection` |
+| Firma agregada | `HTTP.URI.SQL.Injection` (rule 15621) |
 | Action | `Block` |
-| **Quarantine** | ✅ **Attacker's IP address** — expira en **5 minutos** |
+| **Quarantine** | ✅ **Attacker's IP address** — expira en **1 día** (`quarantine-expiry 1d` en el running-config final) |
 
 Este sensor se aplicó en las políticas `USUARIOS_WEB_HTTPS` y `LAB_HTTP_VALIDACION`. Cuando FortiGate detecta un payload de SQL Injection dirigido al WEB-Server:
 
@@ -314,10 +317,13 @@ Aplicado a la política `USUARIOS_WEB_HTTPS` (y `LAB_HTTP_VALIDACION`). Se verif
 | Campo | Valor |
 |---|---|
 | Name | `DOS_USUARIOS_WEB` |
-| Anomalías configuradas | `tcp_syn_flood`, `tcp_port_scan`, entre otras anomalías L3/L4 |
-| Action | `Block` |
+| Interface | `VLAN10_USUARIOS` (tráfico interno Usuarios → WEB) |
+| Source / Destination | `VLAN10_USUARIOS address` → `WEB_SERVER` |
+| Service | `HTTPS` |
+| Anomalía `tcp_syn_flood` | Log **Enable** + **Action: Block** + Threshold `50` paquetes/seg |
+| Resto de anomalías L3/L4 (`tcp_port_scan`, `udp_flood`, `icmp_flood`, etc.) | Quedan en modo **Log** (monitoreo) con sus umbrales por defecto |
 
-Esta política limita la tasa de paquetes/conexiones anómalas hacia el WEB-Server, mitigando ataques de denegación de servicio (DoS) y escaneos agresivos.
+Esta política limita específicamente el volumen de conexiones **SYN** hacia el WEB-Server (mitigando SYN flood / DoS volumétrico), bloqueando automáticamente al origen que supere 50 paquetes SYN por segundo, mientras el resto de anomalías queda visible en los logs para análisis.
 
 > Ver evidencia: [`17_dos_policy_rate_limiting.png`](screenshots/17_dos_policy_rate_limiting.png)
 
@@ -330,8 +336,10 @@ Desde la máquina atacante (Kali/USUARIO-PC en la VLAN de Usuarios, IP `10.7.42.
 **Resultado esperado y observado:**
 1. FortiGate identifica el patrón malicioso con la firma `HTTP.URI.SQL.Injection` del sensor `IPS_SQLI_CUARENTENA`.
 2. La petición se bloquea (`dropped`) — el atacante no recibe respuesta del formulario.
-3. La IP atacante (`10.7.42.10`) es puesta en **cuarentena** automáticamente por 5 minutos (visible en `Dashboard → Quarantine`, con expiración extendida por reincidencia).
+3. La IP atacante (`10.7.42.10`) es puesta en **cuarentena** automáticamente por 1 día (visible en `Dashboard → Quarantine`).
 4. El evento queda registrado en `Log & Report → Security Events → Intrusion Prevention`, con Action `Blocked`/`dropped`, Attack Name `HTTP.URI.SQL.Injection`, Source `10.7.42.10`, Destination `WEB_SERVER`.
+
+> ⚠️ *Esta sección se actualizará con evidencia fresca (capturas + script exacto) al repetir la prueba de forma reproducible antes del video.*
 
 > Ver evidencia: [`20_ataque_sqli_log_ips_dropped.png`](screenshots/20_ataque_sqli_log_ips_dropped.png), [`21_cuarentena_ip_baneada.png`](screenshots/21_cuarentena_ip_baneada.png), [`22_cuarentena_detalle_ip.png`](screenshots/22_cuarentena_detalle_ip.png)
 
@@ -385,7 +393,8 @@ Todas las capturas están en la carpeta [`screenshots/`](screenshots/), numerada
 
 | Archivo | Descripción |
 |---|---|
-| [`running-configs/FortiGate_running-config_2026-09-18.conf`](running-configs/FortiGate_running-config_2026-09-18.conf) | Backup de configuración del FortiGate. |
+| [`running-configs/FortiGate_running-config_2026-09-22.conf`](running-configs/FortiGate_running-config_2026-09-22.conf) | Backup **final** de configuración del FortiGate (incluye todas las políticas, el sensor IPS de cuarentena, el DoS Policy y el File Filter). |
+| [`running-configs/FortiGate_running-config_2026-09-18.conf`](running-configs/FortiGate_running-config_2026-09-18.conf) | Backup intermedio (18 sept.) conservado solo por trazabilidad — reemplazado por el archivo anterior. |
 | [`running-configs/SW-LAB_switch_running-config_2026-09-22.txt`](running-configs/SW-LAB_switch_running-config_2026-09-22.txt) | Running-config del switch Cisco IOS (SW-LAB). |
 
 ---
