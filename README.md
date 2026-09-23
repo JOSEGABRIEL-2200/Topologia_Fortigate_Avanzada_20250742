@@ -137,7 +137,7 @@ Todo el direccionamiento IP de este laboratorio está basado en la matrícula de
 
 ## 3. Configuración del Switch (Seguridad Básica de Redes)
 
-Switch Cisco IOS, hostname `SW-LAB`, con seguridad básica de puertos aplicada. Running-config completo en [`running-configs/SW-LAB_switch_running-config_2026-09-22.txt`](running-configs/SW-LAB_switch_running-config_2026-09-22.txt).
+Switch Cisco IOS, hostname `SW-LAB`, con seguridad básica de puertos y de administración aplicada. Running-config completo en [`running-configs/SW-LAB_switch_running-config_2026-09-23.txt`](running-configs/SW-LAB_switch_running-config_2026-09-23.txt).
 
 | Puerto | Función | Configuración de seguridad |
 |---|---|---|
@@ -145,13 +145,15 @@ Switch Cisco IOS, hostname `SW-LAB`, con seguridad básica de puertos aplicada. 
 | **Eth0/1** | Acceso — Ubuntu-DB | `switchport access vlan 30`, `spanning-tree portfast edge`, `spanning-tree bpduguard enable` |
 | **Eth0/2** | Acceso — Kali-WEB | `switchport access vlan 20`, `portfast edge`, `bpduguard enable` |
 | **Eth0/3** | Acceso — USUARIO-PC | `switchport access vlan 10`, `portfast edge`, `bpduguard enable` |
-| **Puertos sin uso** (Eth1/0–3, Eth2/0–3, Eth3/0–3) | Deshabilitados | `switchport access vlan 999` + `shutdown` — puertos físicos no utilizados quedan apagados y aislados en una VLAN no enrutada, siguiendo la práctica recomendada de "puertos no usados = puertos apagados" |
+| **Eth1/0** | Acceso — VLAN10_USUARIOS (puerto adicional habilitado) | `switchport access vlan 10`, `portfast edge`, `bpduguard enable` |
+| **Puertos sin uso** (Eth1/1–3, Eth2/0–3, Eth3/0–3) | Deshabilitados | `switchport access vlan 999` + `shutdown` — puertos físicos no utilizados quedan apagados y aislados en una VLAN no enrutada, siguiendo la práctica recomendada de "puertos no usados = puertos apagados" |
 
 **Resumen de controles de seguridad básica aplicados:**
 * **BPDU Guard + PortFast** en todos los puertos de acceso: si un puerto de usuario recibe una BPDU (señal de que se conectó un switch no autorizado), el puerto se bloquea automáticamente.
 * **`switchport nonegotiate`** en el trunk: evita que un atacante conectado a ese puerto negocie un enlace trunk vía DTP (mitiga *VLAN hopping*).
 * **VLAN nativa aislada (999)** en el trunk: la VLAN nativa no se usa para tráfico de datos real, reduciendo el riesgo de *double tagging*.
 * **Puertos no utilizados apagados** (`shutdown`) y movidos a la VLAN 999: reduce la superficie de ataque física del switch.
+* **Control de acceso administrativo**: `enable secret` (contraseña cifrada tipo 5 para modo privilegiado), `service password-encryption` habilitado, y contraseña + `login` en las líneas `console`, `vty 0 4` (acceso remoto) y `aux 0`, con `exec-timeout` para cerrar sesiones inactivas automáticamente. También se configuró un `banner motd` de advertencia legal en el acceso a la CLI.
 
 ---
 
@@ -404,7 +406,8 @@ Todas las capturas están en la carpeta [`screenshots/`](screenshots/), numerada
 |---|---|
 | [`running-configs/FortiGate_running-config_2026-09-22.conf`](running-configs/FortiGate_running-config_2026-09-22.conf) | Backup **final** de configuración del FortiGate (incluye todas las políticas, el sensor IPS de cuarentena, el DoS Policy y el File Filter). |
 | [`running-configs/FortiGate_running-config_2026-09-18.conf`](running-configs/FortiGate_running-config_2026-09-18.conf) | Backup intermedio (18 sept.) conservado solo por trazabilidad — reemplazado por el archivo anterior. |
-| [`running-configs/SW-LAB_switch_running-config_2026-09-22.txt`](running-configs/SW-LAB_switch_running-config_2026-09-22.txt) | Running-config del switch Cisco IOS (SW-LAB). |
+| [`running-configs/SW-LAB_switch_running-config_2026-09-23.txt`](running-configs/SW-LAB_switch_running-config_2026-09-23.txt) | Running-config **final** del switch Cisco IOS (SW-LAB), con seguridad de administración aplicada (`enable secret`, contraseñas de línea, `banner motd`). |
+| [`running-configs/SW-LAB_switch_running-config_2026-09-22.txt`](running-configs/SW-LAB_switch_running-config_2026-09-22.txt) | Backup intermedio (22 sept.) conservado solo por trazabilidad — reemplazado por el archivo anterior. |
 
 ---
 

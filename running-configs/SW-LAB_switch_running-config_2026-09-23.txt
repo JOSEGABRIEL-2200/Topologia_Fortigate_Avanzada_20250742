@@ -1,0 +1,173 @@
+Current configuration : 2774 bytes
+!
+! Last configuration change at 05:06:05 UTC Wed Sep 23 2026
+!
+version 15.2
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+service compress-config
+!
+hostname SW-LAB
+!
+boot-start-marker
+boot-end-marker
+!
+!
+enable secret 5 $1$0KBo$vLbA5GG1c1Uv9gA6M8rfv1
+!
+no aaa new-model
+!
+!
+!
+!
+!
+!
+!
+!
+no ip domain-lookup
+ip cef
+no ipv6 cef
+!
+!
+!
+spanning-tree mode pvst
+spanning-tree extend system-id
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface Ethernet0/0
+ description TRUNK-FORTIGATE-PORT3
+ switchport trunk allowed vlan 10,20,30
+ switchport trunk encapsulation dot1q
+ switchport trunk native vlan 999
+ switchport mode trunk
+ switchport nonegotiate
+!
+interface Ethernet0/1
+ description UBUNTU-DB
+ switchport access vlan 30
+ switchport mode access
+ spanning-tree portfast edge
+ spanning-tree bpduguard enable
+!
+interface Ethernet0/2
+ description KALI-WEB
+ switchport access vlan 20
+ switchport mode access
+ spanning-tree portfast edge
+ spanning-tree bpduguard enable
+!
+interface Ethernet0/3
+ description USUARIO-PC
+ switchport access vlan 10
+ switchport mode access
+ spanning-tree portfast edge
+ spanning-tree bpduguard enable
+!
+interface Ethernet1/0
+ switchport access vlan 10
+ switchport mode access
+ spanning-tree portfast edge
+ spanning-tree bpduguard enable
+!
+interface Ethernet1/1
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet1/2
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet1/3
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet2/0
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet2/1
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet2/2
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet2/3
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet3/0
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet3/1
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet3/2
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+interface Ethernet3/3
+ switchport access vlan 999
+ switchport mode access
+ shutdown
+!
+ip forward-protocol nd
+!
+ip http server
+!
+ip ssh server algorithm encryption aes128-ctr aes192-ctr aes256-ctr
+ip ssh client algorithm encryption aes128-ctr aes192-ctr aes256-ctr
+!
+!
+!
+!
+!
+control-plane
+!
+banner motd ^C
+ACCESO RESTRINGIDO - Solo personal autorizado. SW-LAB - Practica 1 - Seguridad de Redes ITLA.
+^C
+!
+line con 0
+ exec-timeout 5 0
+ password 7 05080F1C2243
+ logging synchronous
+ login
+line aux 0
+ password 7 01100F175804
+ login
+line vty 0 4
+ exec-timeout 5 0
+ password 7 121A0C0411045D5679
+ login
+!
+!
+!
+end
